@@ -171,7 +171,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
         {fPurchase.isMSI && (
           <F label="NÚMERO DE MESES">
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
-              {[3,6,9,12,18,24].map(n=>(
+              {[3,6,9,12,15,18,24].map(n=>(
                 <button key={n} onClick={()=>setFP(p=>({...p,months:String(n)}))} style={{
                   padding:"8px 14px",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700,
                   background:fPurchase.months===String(n)?"#4338CA":"#1F2937",
