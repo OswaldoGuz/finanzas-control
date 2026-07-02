@@ -599,7 +599,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
   const {y:CY,m:CM} = todayObj();
   const d = initialData || {};
   const initCards = (d.cards || DEFAULT_CARDS).map(c=>({...c,limit:c.limit??0}));
-  const initFixed = (()=>{ const f=d.fixedExpenses||DEFAULT_FIXED; const ids=new Set(f.map(x=>x.id)); return [...f,...DEFAULT_FIXED.filter(dd=>!ids.has(dd.id))]; })();
+  const initFixed = d.fixedExpenses || DEFAULT_FIXED;
 
   const [tab,setTab]             = useState("timeline");
   const [viewYear,setViewYear]   = useState(CY);
