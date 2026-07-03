@@ -952,6 +952,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
           {timeline.length===0?(
             <div style={{textAlign:"center",color:"#374151",padding:"48px 0"}}><div style={{fontSize:36,marginBottom:10}}>📭</div>Agrega compras a tus tarjetas para empezar.</div>
           ):(
+          <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead>
                 <tr style={{background:"#111827"}}>
@@ -974,7 +975,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
                               <span style={{color:item.status==="pagado"?"#6B7280":"#F9FAFB",fontSize:13,fontWeight:600,textDecoration:item.status==="pagado"?"line-through":"none"}}>{item.name}</span>
                               {(item.exId||item.varId||item.eiId)&&<button onClick={e=>deleteItem(item,e)} style={{fontSize:9,background:"#1F0000",border:"1px solid #EF444433",borderRadius:4,color:"#EF4444",padding:"1px 5px",cursor:"pointer",lineHeight:1}}>✕</button>}
                             </div>
-                            {(ov||item.sub)&&<div style={{fontSize:11,color:"#4B5563",marginTop:1,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ov&&<span style={{color:"#EF4444"}}>⚠ vencido · </span>}{item.sub}{item.isCarryOver&&<button onClick={e=>{e.stopPropagation();setModal({type:"editBalanceOverride",currentAmount:item.amount});}} style={{marginLeft:8,fontSize:10,background:"#1F2937",border:"1px solid #374151",borderRadius:6,color:"#9CA3AF",padding:"1px 7px",cursor:"pointer"}}>✏ editar</button>}{item.isCarryOver&&md.balanceOverride!=null&&<span style={{marginLeft:6,fontSize:10,color:"#F59E0B"}}>✎ manual</span>}</div>}
+                            {(ov||item.sub)&&<div style={{fontSize:11,color:"#4B5563",marginTop:1,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ov&&<span style={{color:"#EF4444"}}>⚠ vencido · </span>}{item.sub}{item.isCarryOver&&<button onClick={e=>{e.stopPropagation();setModal({type:"editBalanceOverride",currentAmount:item.amount});}} style={{marginLeft:8,fontSize:10,background:"#1F2937",border:"1px solid #374151",borderRadius:6,color:"#9CA3AF",padding:"1px 7px",cursor:"pointer"}}>✏ editar</button>}{item.isCarryOver&&md.balanceOverride!=null&&<span style={{marginLeft:6,fontSize:10,color:"#F59E0B"}}>✎ manual</span>}</div>}
                           </div>
                         </div>
                       </td>
@@ -996,6 +997,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
                 </tr>
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
