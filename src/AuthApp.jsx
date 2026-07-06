@@ -52,6 +52,5 @@ function AppWithData({ user, onLogout }) {
     </div>
   );
 
-  console.log("DATA FROM FIRESTORE:", JSON.stringify(data));
 return <App initialData={data} onSave={save} user={user} onLogout={onLogout} />;
 }
