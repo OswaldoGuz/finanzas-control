@@ -48,7 +48,7 @@ const IS = { width:"100%", background:"#1F2937", border:"1px solid #374151", bor
 
 function Sheet({ title, onClose, children }) {
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+    <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#111827",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:520,maxHeight:"92vh",overflowY:"auto",padding:"24px 20px 40px"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:18}}>
           <span style={{color:"#F9FAFB",fontWeight:800,fontSize:17}}>{title}</span>
