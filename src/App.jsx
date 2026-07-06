@@ -613,10 +613,14 @@ export default function App({ initialData, onSave, user, onLogout }) {
   const [monthData,setMonthData] = useState(d.monthData || {});
   const [modal,setModal]         = useState(null);
 
-  // Save to Firebase on any change
-  useEffect(()=>{
+  // Save to Firebase on any change — protect against overwriting with empty data
+ const hasLoaded = useRef(false);
+ useEffect(()=>{
+    const hasData = purchases.length > 0 || goals.length > 0 || Object.keys(monthData).length > 0;
+    if(!hasLoaded.current && !hasData) return; // don't save empty state on first load
+    hasLoaded.current = true;
     onSave({ cards, fixedExpenses, quincenas, purchases, startingBalance, goals, monthData });
-  },[cards,fixedExpenses,quincenas,purchases,startingBalance,goals,monthData]);
+},[cards,fixedExpenses,quincenas,purchases,startingBalance,goals,monthData]);
 
   const mk = `${viewYear}-${pad(viewMonth)}`;
   const md = monthData[mk]||{};
