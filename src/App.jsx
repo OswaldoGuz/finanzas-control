@@ -32,13 +32,13 @@ const DEFAULT_QUINCENAS = [
 // For MSI, generates monthly payments starting chargeYear/chargeMonth
 function getPurchasePayments(p) {
   if (!p.isMSI) {
-    return [{ year:p.chargeYear, month:p.chargeMonth, amount:p.total, purchaseId:p.id, desc:p.description, isMSI:false }];
+    return [{ year:p.chargeYear, month:p.chargeMonth, amount:p.total, purchaseId:p.id, desc:p.description, isMSI:false, isCredit:!!p.isCredit }];
   }
   const monthly = p.total / p.months;
   const out = [];
   for (let i = 0; i < p.months; i++) {
     const d = new Date(p.chargeYear, p.chargeMonth - 1 + i, 1);
-    out.push({ year:d.getFullYear(), month:d.getMonth()+1, amount:monthly, purchaseId:p.id, desc:p.description, isMSI:true, installment:i+1, totalInstallments:p.months });
+    out.push({ year:d.getFullYear(), month:d.getMonth()+1, amount:monthly, purchaseId:p.id, desc:p.description, isMSI:true, installment:i+1, totalInstallments:p.months, isCredit:!!p.isCredit });
   }
   return out;
 }
@@ -110,6 +110,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
   };
 
   const [fPurchase, setFP] = useState(def());
+  const [fCredit, setFCredit] = useState({ description:"", amount:"", chargeYear:def().chargeYear, chargeMonth:def().chargeMonth });
   const [f3, setF3] = useState({ name:"", payDay:"1", color:"#5c6bc0" });
   const [f4, setF4] = useState({ name:"", payDay:"1", color:"#5c6bc0" });
   const [f5, setF5] = useState({ name:"", amount:"", day:"1", type:"fixed" });
@@ -131,6 +132,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
     const dy=`${viewYear}-${pad(viewMonth)}-${pad(new Date().getDate())}`;
 
     if(modal.type==="addPurchase")  setFP({ description:"", total:"", isMSI:false, months:"12", chargeYear:viewYear, chargeMonth:viewMonth });
+    if(modal.type==="addCredit")    setFCredit({ description:"", amount:"", chargeYear:viewYear, chargeMonth:viewMonth });
     if(modal.type==="addCard")      setF3({ name:"", payDay:"1", color:"#5c6bc0" });
     if(modal.type==="editCard")     setF4({ name:modal.card.name, payDay:String(modal.card.payDay), color:modal.card.color, limit:String(modal.card.limit||0) });
     if(modal.type==="addFixed")     setF5({ name:"", amount:"", day:"1", type:"fixed" });
@@ -214,24 +216,61 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
     );
   }
 
+  // ── addCredit (abono / bonificación) ────────────────────────────────────────
+  if(modal.type==="addCredit") {
+    const card = modal.card;
+    const amt = parseFloat(fCredit.amount)||0;
+    return (
+      <Sheet title={`Nuevo abono — ${card.name}`} onClose={onClose}>
+        <F label="DESCRIPCIÓN" hint="Ej: Bonificación del banco, cashback, promoción...">
+          <input style={IS} placeholder="Ej: Bonificación BBVA" value={fCredit.description} onChange={e=>setFCredit(p=>({...p,description:e.target.value}))} autoFocus/>
+        </F>
+        <F label="MONTO ($)">
+          <input style={IS} type="number" min="0" placeholder="0.00" value={fCredit.amount} onChange={e=>setFCredit(p=>({...p,amount:e.target.value}))}/>
+        </F>
+        <F label="MES DE APLICACIÓN" hint="Mes en que se refleja el abono en tu estado de cuenta">
+          <MonthYearSelect year={fCredit.chargeYear} month={fCredit.chargeMonth} onChange={(y,m)=>setFCredit(p=>({...p,chargeYear:y,chargeMonth:m}))}/>
+        </F>
+        {amt > 0 && (
+          <div style={{background:"#0D2418",borderRadius:10,padding:"11px 14px",marginBottom:14,border:"1px solid #059669"}}>
+            <div style={{color:"#34D399",fontSize:13,fontWeight:700}}>Se restará {fmt(amt)} del pago y la deuda de {MONTHS[fCredit.chargeMonth-1]} {fCredit.chargeYear}</div>
+          </div>
+        )}
+        <Btn bg="#064E3B" border="#059669" color="#34D399" onClick={()=>{
+          if(!fCredit.description.trim()||!amt) return;
+          setPurchases(prev=>[...prev,{
+            id:Date.now().toString(), cardId:card.id,
+            description:fCredit.description.trim(), total:-amt,
+            isMSI:false, months:1,
+            chargeYear:fCredit.chargeYear, chargeMonth:fCredit.chargeMonth,
+            isCredit:true,
+          }]);
+          onClose();
+        }}>Agregar abono</Btn>
+      </Sheet>
+    );
+  }
+
   // ── viewCardPurchases ─────────────────────────────────────────────────────
   if(modal.type==="viewCardPurchases") {
     const card = modal.card;
     const cardPurchases = purchases.filter(p=>p.cardId===card.id);
     return (
-      <Sheet title={`Compras — ${card.name}`} onClose={onClose}>
-        {cardPurchases.length===0 && <div style={{color:"#4B5563",fontSize:14,textAlign:"center",padding:"20px 0"}}>Sin compras registradas</div>}
+      <Sheet title={`Movimientos — ${card.name}`} onClose={onClose}>
+        {cardPurchases.length===0 && <div style={{color:"#4B5563",fontSize:14,textAlign:"center",padding:"20px 0"}}>Sin movimientos registrados</div>}
         {cardPurchases.map(p=>{
           const payments = getPurchasePayments(p);
           const thisMonth = payments.find(pay=>pay.year===viewYear&&pay.month===viewMonth);
           const remainingPays = p.isMSI ? payments.filter(pay=>{ const d=new Date(); return new Date(pay.year,pay.month-1)>=new Date(d.getFullYear(),d.getMonth()); }).length : null;
           return (
-            <div key={p.id} style={{background:"#0F172A",borderRadius:12,padding:"12px 14px",marginBottom:10,border:"1px solid #1F2937"}}>
+            <div key={p.id} style={{background:"#0F172A",borderRadius:12,padding:"12px 14px",marginBottom:10,border:`1px solid ${p.isCredit?"#059669":"#1F2937"}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div style={{flex:1}}>
-                  <div style={{color:"#F9FAFB",fontWeight:700,fontSize:14}}>{p.description}</div>
+                  <div style={{color:"#F9FAFB",fontWeight:700,fontSize:14}}>{p.isCredit&&"🎁 "}{p.description}</div>
                   <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
-                    {p.isMSI ? (
+                    {p.isCredit ? (
+                      <span style={{fontSize:11,background:"#064E3B",color:"#34D399",padding:"2px 8px",borderRadius:20,fontWeight:700}}>ABONO</span>
+                    ) : p.isMSI ? (
                       <>
                         <span style={{fontSize:11,background:"#1E1B4B",color:"#818CF8",padding:"2px 8px",borderRadius:20,fontWeight:700}}>{p.months} MSI</span>
                         <span style={{fontSize:11,color:"#6B7280"}}>{fmt(p.total/p.months)}/mes</span>
@@ -245,7 +284,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
                   {thisMonth && <div style={{color:"#F59E0B",fontSize:12,marginTop:4}}>↳ Este mes: {fmt(thisMonth.amount)}</div>}
                 </div>
                 <div style={{textAlign:"right",marginLeft:10}}>
-                  <div style={{color:"#F9FAFB",fontWeight:700}}>{fmt(p.total)}</div>
+                  <div style={{color:p.isCredit?"#34D399":"#F9FAFB",fontWeight:700}}>{fmt(p.total)}</div>
                   <button onClick={(e)=>{ e.stopPropagation(); setPurchases(prev=>prev.filter(x=>x.id!==p.id)); }}
                     style={{fontSize:11,color:"#EF4444",background:"#1F0000",border:"1px solid #EF444433",borderRadius:6,padding:"3px 8px",cursor:"pointer",marginTop:4}}>✕ Eliminar</button>
                 </div>
@@ -276,7 +315,10 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
           );
         })}
         <div style={{height:1,background:"#1F2937",margin:"4px 0 16px"}}/>
-        <Btn bg="#4338CA" border="#6366F1" color="#fff" onClick={()=>{ onClose(); setTimeout(()=>modal.onAddPurchase&&modal.onAddPurchase(),50); }}>+ Nueva compra</Btn>
+        <div style={{display:"flex",gap:8}}>
+          <Btn bg="#4338CA" border="#6366F1" color="#fff" onClick={()=>{ onClose(); setTimeout(()=>modal.onAddPurchase&&modal.onAddPurchase(),50); }}>+ Nueva compra</Btn>
+          <Btn bg="#064E3B" border="#059669" color="#34D399" onClick={()=>{ onClose(); setTimeout(()=>modal.onAddCredit&&modal.onAddCredit(),50); }}>+ Nuevo abono</Btn>
+        </div>
       </Sheet>
     );
   }
@@ -573,12 +615,12 @@ function CardFicha({ card, cardMd, cardPayments, totalThisMonth, totalDebt, onAd
         {cardPayments.map(p=>(
           <div key={p.purchaseId} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:10,background:p.isMSI?"#1E1B4B":"#064E3B",color:p.isMSI?"#818CF8":"#34D399",padding:"1px 7px",borderRadius:20,fontWeight:700}}>
-                {p.isMSI?`${p.installment}/${p.totalInstallments}`:"1/1"}
+              <span style={{fontSize:10,background:p.isCredit?"#064E3B":p.isMSI?"#1E1B4B":"#064E3B",color:p.isCredit?"#34D399":p.isMSI?"#818CF8":"#34D399",padding:"1px 7px",borderRadius:20,fontWeight:700}}>
+                {p.isCredit?"ABONO":p.isMSI?`${p.installment}/${p.totalInstallments}`:"1/1"}
               </span>
               <span style={{color:"#9CA3AF",fontSize:12}}>{p.desc}</span>
             </div>
-            <span style={{color:p.isMSI?"#818CF8":"#34D399",fontSize:13,fontWeight:600}}>{fmt(p.amount)}</span>
+            <span style={{color:p.isCredit?"#34D399":p.isMSI?"#818CF8":"#34D399",fontSize:13,fontWeight:600}}>{fmt(p.amount)}</span>
           </div>
         ))}
         <div style={{display:"flex",gap:8,marginTop:10}}>
@@ -721,7 +763,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
       const total=cardTotals[card.id]||0;
       if(total>0) {
         const pays=purchasePaymentsByCard[card.id]||[];
-        const sub=pays.map(p=>`${p.desc}${p.isMSI?` (${p.installment}/${p.totalInstallments})`:""}` ).join(" · ");
+        const sub=pays.map(p=>`${p.isCredit?"🎁 ":""}${p.desc}${p.isMSI?` (${p.installment}/${p.totalInstallments})`:""}` ).join(" · ");
         items.push({id:`c-${card.id}`,type:"expense",name:card.name,sub:sub||undefined,
           date:`${viewYear}-${pad(viewMonth)}-${pad(card.payDay)}`,amount:total,
           status:md.cards?.[card.id]?.paid?"pagado":"pendiente",cardId:card.id,cardColor:card.color});
@@ -1020,7 +1062,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
               totalThisMonth={cardTotals[card.id]||0}
               totalDebt={totalDebtByCard[card.id]||0}
               onAddPurchase={()=>setModal({type:"addPurchase",card})}
-              onViewPurchases={()=>setModal({type:"viewCardPurchases",card,onAddPurchase:()=>setModal({type:"addPurchase",card})})}
+              onViewPurchases={()=>setModal({type:"viewCardPurchases",card,onAddPurchase:()=>setModal({type:"addPurchase",card}),onAddCredit:()=>setModal({type:"addCredit",card})})}
               onEditCard={()=>setModal({type:"editCard",card})}
               onTogglePaid={()=>updateMD(c=>({...c,cards:{...(c.cards||{}),[card.id]:{...(c.cards?.[card.id]||{}),paid:!(c.cards?.[card.id]||{}).paid}}}))}
             />
