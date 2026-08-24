@@ -32,13 +32,13 @@ const DEFAULT_QUINCENAS = [
 // For MSI, generates monthly payments starting chargeYear/chargeMonth
 function getPurchasePayments(p) {
   if (!p.isMSI) {
-    return [{ year:p.chargeYear, month:p.chargeMonth, amount:p.total, purchaseId:p.id, desc:p.description, isMSI:false, isCredit:!!p.isCredit }];
+    return [{ year:p.chargeYear, month:p.chargeMonth, amount:p.total, purchaseId:p.id, desc:p.description, isMSI:false, isCredit:!!p.isCredit, isBusiness:!!p.isBusiness }];
   }
   const monthly = p.total / p.months;
   const out = [];
   for (let i = 0; i < p.months; i++) {
     const d = new Date(p.chargeYear, p.chargeMonth - 1 + i, 1);
-    out.push({ year:d.getFullYear(), month:d.getMonth()+1, amount:monthly, purchaseId:p.id, desc:p.description, isMSI:true, installment:i+1, totalInstallments:p.months, isCredit:!!p.isCredit });
+    out.push({ year:d.getFullYear(), month:d.getMonth()+1, amount:monthly, purchaseId:p.id, desc:p.description, isMSI:true, installment:i+1, totalInstallments:p.months, isCredit:!!p.isCredit, isBusiness:!!p.isBusiness });
   }
   return out;
 }
@@ -100,13 +100,13 @@ function MonthYearSelect({ year, month, onChange }) {
 }
 
 // ─── Active Modal (single always-mounted component) ───────────────────────────
-function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
+function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas, bizExpenses, bizRecurringIncome,
   viewYear, viewMonth, md,
-  setCards, setFixed, setPurchases, setQuincenas, updateMD, onSaveGoal, onUpdateGoal, onUpdateGoalMonth, onClose }) {
+  setCards, setFixed, setPurchases, setQuincenas, setBizExpenses, setBizRecurringIncome, updateMD, onSaveGoal, onUpdateGoal, onUpdateGoalMonth, onClose }) {
 
   const def = () => {
     const {y,m} = todayObj();
-    return { description:"", total:"", isMSI:false, months:"12", chargeYear:y, chargeMonth:m };
+    return { description:"", total:"", isMSI:false, months:"12", chargeYear:y, chargeMonth:m, isBusiness:false };
   };
 
   const [fPurchase, setFP] = useState(def());
@@ -121,6 +121,12 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
   const [f10,setF10]= useState({ name:"", amount:"", date:"" });
   const [f11,setF11]= useState({ name:"", amount:"", date:"" });
   const [fGoal,setFGoal] = useState({ name:"", target:"" });
+  const [fBI, setFBI]   = useState({ name:"", amount:"", date:"" });
+  const [fBE, setFBE]   = useState({ name:"", amount:"", day:"1", type:"fixed" });
+  const [fBE2,setFBE2]  = useState({ name:"", amount:"", day:"1" });
+  const [fBRI, setFBRI]  = useState({ client:"", name:"", amount:"", day:"1", type:"fixed" });
+  const [fBRIMode, setFBRIMode] = useState("new"); // "existing" | "new"
+  const [fBRI2,setFBRI2] = useState({ client:"", name:"", amount:"", day:"1" });
 
   const prevType = useRef(null);
 
@@ -131,7 +137,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
     const {y,m}=todayObj();
     const dy=`${viewYear}-${pad(viewMonth)}-${pad(new Date().getDate())}`;
 
-    if(modal.type==="addPurchase")  setFP({ description:"", total:"", isMSI:false, months:"12", chargeYear:viewYear, chargeMonth:viewMonth });
+    if(modal.type==="addPurchase")  setFP({ description:"", total:"", isMSI:false, months:"12", chargeYear:viewYear, chargeMonth:viewMonth, isBusiness:false });
     if(modal.type==="addCredit")    setFCredit({ description:"", amount:"", chargeYear:viewYear, chargeMonth:viewMonth });
     if(modal.type==="addCard")      setF3({ name:"", payDay:"1", color:"#5c6bc0" });
     if(modal.type==="editCard")     setF4({ name:modal.card.name, payDay:String(modal.card.payDay), color:modal.card.color, limit:String(modal.card.limit||0) });
@@ -144,6 +150,15 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
     if(modal.type==="addExtraIncome") setF11({ name:"", amount:"", date:dy });
     if(modal.type==="addGoal") setFGoal({ name:"", target:"" });
     if(modal.type==="editGoal") setFGoal({ name:modal.goal.name, target:String(modal.goal.target) });
+    if(modal.type==="addBizIncome")  setFBI({ name:"", amount:"", date:dy });
+    if(modal.type==="addBizExpense")  setFBE({ name:"", amount:"", day:"1", type:"fixed" });
+    if(modal.type==="editBizExpense") setFBE2({ name:modal.be.name, amount:String(md.bizExpenseAmt?.[modal.be.id]??modal.be.amount), day:String(modal.be.day) });
+    if(modal.type==="addBizRecurringIncome") {
+      const existingClients = [...new Set(bizRecurringIncome.map(b=>b.client).filter(Boolean))];
+      setFBRIMode(existingClients.length>0 ? "existing" : "new");
+      setFBRI({ client: existingClients[0]||"", name:"", amount:"", day:"1", type:"fixed" });
+    }
+    if(modal.type==="editBizRecurringIncome") setFBRI2({ client:modal.bri.client||"", name:modal.bri.name, amount:String(md.bizIncomeAmt?.[modal.bri.id]??modal.bri.amount), day:String(modal.bri.day) });
   },[modal]);
 
   if(!modal) return null;
@@ -169,6 +184,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
         </F>
 
         <Toggle value={fPurchase.isMSI} onChange={v=>setFP(p=>({...p,isMSI:v}))} labelOn="Compra a MSI (meses sin intereses)" labelOff="Pago único (un solo cargo)"/>
+        <Toggle value={fPurchase.isBusiness} onChange={v=>setFP(p=>({...p,isBusiness:v}))} labelOn="💼 Gasto del negocio" labelOff="Gasto personal"/>
 
         {fPurchase.isMSI && (
           <F label="NÚMERO DE MESES">
@@ -209,6 +225,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
             description:fPurchase.description.trim(), total:tot,
             isMSI:fPurchase.isMSI, months:parseInt(fPurchase.months)||1,
             chargeYear:fPurchase.chargeYear, chargeMonth:fPurchase.chargeMonth,
+            isBusiness:fPurchase.isBusiness,
           }]);
           onClose();
         }}>Agregar compra</Btn>
@@ -266,7 +283,7 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
             <div key={p.id} style={{background:"#0F172A",borderRadius:12,padding:"12px 14px",marginBottom:10,border:`1px solid ${p.isCredit?"#059669":"#1F2937"}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div style={{flex:1}}>
-                  <div style={{color:"#F9FAFB",fontWeight:700,fontSize:14}}>{p.isCredit&&"🎁 "}{p.description}</div>
+                  <div style={{color:"#F9FAFB",fontWeight:700,fontSize:14}}>{p.isCredit&&"🎁 "}{p.isBusiness&&"💼 "}{p.description}</div>
                   <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
                     {p.isCredit ? (
                       <span style={{fontSize:11,background:"#064E3B",color:"#34D399",padding:"2px 8px",borderRadius:20,fontWeight:700}}>ABONO</span>
@@ -279,14 +296,19 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
                     ) : (
                       <span style={{fontSize:11,background:"#064E3B",color:"#34D399",padding:"2px 8px",borderRadius:20,fontWeight:700}}>Pago único</span>
                     )}
+                    {p.isBusiness && <span style={{fontSize:11,background:"#1E293B",color:"#93C5FD",padding:"2px 8px",borderRadius:20,fontWeight:700}}>NEGOCIO</span>}
                     <span style={{fontSize:11,color:"#4B5563"}}>{MONTHS[p.chargeMonth-1]} {p.chargeYear}</span>
                   </div>
                   {thisMonth && <div style={{color:"#F59E0B",fontSize:12,marginTop:4}}>↳ Este mes: {fmt(thisMonth.amount)}</div>}
                 </div>
                 <div style={{textAlign:"right",marginLeft:10}}>
                   <div style={{color:p.isCredit?"#34D399":"#F9FAFB",fontWeight:700}}>{fmt(p.total)}</div>
-                  <button onClick={(e)=>{ e.stopPropagation(); setPurchases(prev=>prev.filter(x=>x.id!==p.id)); }}
-                    style={{fontSize:11,color:"#EF4444",background:"#1F0000",border:"1px solid #EF444433",borderRadius:6,padding:"3px 8px",cursor:"pointer",marginTop:4}}>✕ Eliminar</button>
+                  <div style={{display:"flex",gap:6,marginTop:4,justifyContent:"flex-end"}}>
+                    <button onClick={(e)=>{ e.stopPropagation(); setPurchases(prev=>prev.map(x=>x.id===p.id?{...x,isBusiness:!x.isBusiness}:x)); }}
+                      style={{fontSize:11,color:p.isBusiness?"#93C5FD":"#6B7280",background:p.isBusiness?"#1E293B":"#1F2937",border:`1px solid ${p.isBusiness?"#3B82F6":"#374151"}`,borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>💼</button>
+                    <button onClick={(e)=>{ e.stopPropagation(); setPurchases(prev=>prev.filter(x=>x.id!==p.id)); }}
+                      style={{fontSize:11,color:"#EF4444",background:"#1F0000",border:"1px solid #EF444433",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>✕ Eliminar</button>
+                  </div>
                 </div>
               </div>
               {p.isMSI && remainingPays > 1 && (()=>{
@@ -545,6 +567,114 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
     );
   }
 
+  // ── addBizIncome (ingreso del negocio, ad-hoc: cliente/pago cerrado) ────────
+  if(modal.type==="addBizIncome") {
+    return (
+      <Sheet title="Nuevo ingreso del negocio" onClose={onClose}>
+        <F label="CONCEPTO / CLIENTE"><input style={IS} placeholder="Ej: Cliente ACME, Licencia mensual..." value={fBI.name} onChange={e=>setFBI(p=>({...p,name:e.target.value}))} autoFocus/></F>
+        <F label="MONTO ($)"><input style={IS} type="number" min="0" value={fBI.amount} onChange={e=>setFBI(p=>({...p,amount:e.target.value}))}/></F>
+        <F label="FECHA"><input style={IS} type="date" value={fBI.date} onChange={e=>setFBI(p=>({...p,date:e.target.value}))}/></F>
+        <Btn bg="#064E3B" border="#059669" color="#34D399" onClick={()=>{ if(!fBI.name.trim()||!parseFloat(fBI.amount)) return; updateMD(cur=>({...cur,bizIncomes:[...(cur.bizIncomes||[]),{id:Date.now().toString(),paid:false,name:fBI.name.trim(),amount:parseFloat(fBI.amount),date:fBI.date}]})); onClose(); }}>Agregar ingreso</Btn>
+      </Sheet>
+    );
+  }
+
+  // ── addBizRecurringIncome (cliente con licencia/módulo recurrente) ─────────
+  if(modal.type==="addBizRecurringIncome") {
+    const existingClients = [...new Set(bizRecurringIncome.map(b=>b.client).filter(Boolean))];
+    return (
+      <Sheet title="Nuevo ingreso recurrente" onClose={onClose}>
+        <F label="CLIENTE">
+          {existingClients.length>0 && (
+            <select style={{...IS, marginBottom: fBRIMode==="new" ? 8 : 0}} value={fBRIMode==="existing"?fBRI.client:"__new__"} onChange={e=>{
+              if(e.target.value==="__new__") { setFBRIMode("new"); setFBRI(p=>({...p,client:""})); }
+              else { setFBRIMode("existing"); setFBRI(p=>({...p,client:e.target.value})); }
+            }}>
+              {existingClients.map(c=><option key={c} value={c}>{c}</option>)}
+              <option value="__new__">+ Nuevo cliente...</option>
+            </select>
+          )}
+          {(fBRIMode==="new" || existingClients.length===0) && (
+            <input style={IS} placeholder="Ej: ACME Corp" value={fBRI.client} onChange={e=>setFBRI(p=>({...p,client:e.target.value}))} autoFocus={existingClients.length===0}/>
+          )}
+        </F>
+        <F label="CONCEPTO" hint="Ej: Licencia Enterprise, Módulo Reportes, Módulo Inventario..."><input style={IS} placeholder="Ej: Licencia Enterprise" value={fBRI.name} onChange={e=>setFBRI(p=>({...p,name:e.target.value}))}/></F>
+        <F label="MONTO ($)" hint="Para variables pon 0 y actualízalo cada mes"><input style={IS} type="number" min="0" value={fBRI.amount} onChange={e=>setFBRI(p=>({...p,amount:e.target.value}))}/></F>
+        <F label="DÍA DE COBRO"><input style={IS} type="number" min="1" max="31" value={fBRI.day} onChange={e=>setFBRI(p=>({...p,day:e.target.value}))}/></F>
+        <F label="TIPO">
+          <div style={{display:"flex",gap:8}}>
+            {[["fixed","Fijo"],["variable","Variable"]].map(([t,l])=>(
+              <button key={t} onClick={()=>setFBRI(p=>({...p,type:t}))} style={{flex:1,padding:"9px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,background:fBRI.type===t?"#1F2937":"#111827",border:`1px solid ${fBRI.type===t?"#4B5563":"#1F2937"}`,color:fBRI.type===t?"#F9FAFB":"#6B7280"}}>{l}</button>
+            ))}
+          </div>
+        </F>
+        <Btn bg="#064E3B" border="#059669" color="#34D399" onClick={()=>{ if(!fBRI.client.trim()||!fBRI.name.trim()) return; setBizRecurringIncome(prev=>[...prev,{id:Date.now().toString(),client:fBRI.client.trim(),name:fBRI.name.trim(),amount:parseFloat(fBRI.amount)||0,day:parseInt(fBRI.day)||1,type:fBRI.type}]); onClose(); }}>Agregar</Btn>
+      </Sheet>
+    );
+  }
+
+  // ── editBizRecurringIncome ───────────────────────────────────────────────
+  if(modal.type==="editBizRecurringIncome") {
+    const bri = modal.bri;
+    return (
+      <Sheet title={`Editar ${bri.name}`} onClose={onClose}>
+        <F label="CLIENTE"><input style={IS} value={fBRI2.client} onChange={e=>setFBRI2(p=>({...p,client:e.target.value}))}/></F>
+        <F label="CONCEPTO"><input style={IS} value={fBRI2.name} onChange={e=>setFBRI2(p=>({...p,name:e.target.value}))}/></F>
+        <F label={bri.type==="variable"?"MONTO ESTE MES ($)":"MONTO ($)"}><input style={IS} type="number" min="0" value={fBRI2.amount} onChange={e=>setFBRI2(p=>({...p,amount:e.target.value}))}/></F>
+        <F label="DÍA"><input style={IS} type="number" min="1" max="31" value={fBRI2.day} onChange={e=>setFBRI2(p=>({...p,day:e.target.value}))}/></F>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>{ setBizRecurringIncome(prev=>prev.filter(x=>x.id!==bri.id)); onClose(); }} style={{flex:1,padding:"12px",borderRadius:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444",fontSize:14,cursor:"pointer",fontWeight:700}}>Eliminar</button>
+          <button onClick={()=>{
+            const a=parseFloat(fBRI2.amount)||0;
+            if(bri.type==="fixed") setBizRecurringIncome(prev=>prev.map(x=>x.id===bri.id?{...x,client:fBRI2.client.trim(),name:fBRI2.name.trim(),amount:a,day:parseInt(fBRI2.day)||1}:x));
+            else { updateMD(cur=>({...cur,bizIncomeAmt:{...(cur.bizIncomeAmt||{}),[bri.id]:a}})); setBizRecurringIncome(prev=>prev.map(x=>x.id===bri.id?{...x,client:fBRI2.client.trim(),name:fBRI2.name.trim(),day:parseInt(fBRI2.day)||1}:x)); }
+            onClose();
+          }} style={{flex:2,padding:"12px",borderRadius:12,background:"#064E3B",border:"1px solid #059669",color:"#34D399",fontSize:14,fontWeight:700,cursor:"pointer"}}>Guardar</button>
+        </div>
+      </Sheet>
+    );
+  }
+
+  // ── addBizExpense ─────────────────────────────────────────────────────────
+  if(modal.type==="addBizExpense") {
+    return (
+      <Sheet title="Nuevo gasto del negocio" onClose={onClose}>
+        <F label="NOMBRE"><input style={IS} placeholder="Ej: Servidores, Licencias, Ads Facebook, Tokens OpenAI..." value={fBE.name} onChange={e=>setFBE(p=>({...p,name:e.target.value}))}/></F>
+        <F label="MONTO ($)" hint="Para variables pon 0 y actualízalo cada mes"><input style={IS} type="number" min="0" value={fBE.amount} onChange={e=>setFBE(p=>({...p,amount:e.target.value}))}/></F>
+        <F label="DÍA DE PAGO"><input style={IS} type="number" min="1" max="31" value={fBE.day} onChange={e=>setFBE(p=>({...p,day:e.target.value}))}/></F>
+        <F label="TIPO">
+          <div style={{display:"flex",gap:8}}>
+            {[["fixed","Fijo"],["variable","Variable"]].map(([t,l])=>(
+              <button key={t} onClick={()=>setFBE(p=>({...p,type:t}))} style={{flex:1,padding:"9px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13,background:fBE.type===t?"#1F2937":"#111827",border:`1px solid ${fBE.type===t?"#4B5563":"#1F2937"}`,color:fBE.type===t?"#F9FAFB":"#6B7280"}}>{l}</button>
+            ))}
+          </div>
+        </F>
+        <Btn onClick={()=>{ if(!fBE.name.trim()) return; setBizExpenses(prev=>[...prev,{id:Date.now().toString(),name:fBE.name.trim(),amount:parseFloat(fBE.amount)||0,day:parseInt(fBE.day)||1,type:fBE.type}]); onClose(); }}>Agregar</Btn>
+      </Sheet>
+    );
+  }
+
+  // ── editBizExpense ────────────────────────────────────────────────────────
+  if(modal.type==="editBizExpense") {
+    const be = modal.be;
+    return (
+      <Sheet title={`Editar ${be.name}`} onClose={onClose}>
+        <F label="NOMBRE"><input style={IS} value={fBE2.name} onChange={e=>setFBE2(p=>({...p,name:e.target.value}))}/></F>
+        <F label={be.type==="variable"?"MONTO ESTE MES ($)":"MONTO ($)"}><input style={IS} type="number" min="0" value={fBE2.amount} onChange={e=>setFBE2(p=>({...p,amount:e.target.value}))}/></F>
+        <F label="DÍA"><input style={IS} type="number" min="1" max="31" value={fBE2.day} onChange={e=>setFBE2(p=>({...p,day:e.target.value}))}/></F>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>{ setBizExpenses(prev=>prev.filter(x=>x.id!==be.id)); onClose(); }} style={{flex:1,padding:"12px",borderRadius:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444",fontSize:14,cursor:"pointer",fontWeight:700}}>Eliminar</button>
+          <button onClick={()=>{
+            const a=parseFloat(fBE2.amount)||0;
+            if(be.type==="fixed") setBizExpenses(prev=>prev.map(x=>x.id===be.id?{...x,name:fBE2.name.trim(),amount:a,day:parseInt(fBE2.day)||1}:x));
+            else { updateMD(cur=>({...cur,bizExpenseAmt:{...(cur.bizExpenseAmt||{}),[be.id]:a}})); setBizExpenses(prev=>prev.map(x=>x.id===be.id?{...x,name:fBE2.name.trim(),day:parseInt(fBE2.day)||1}:x)); }
+            onClose();
+          }} style={{flex:2,padding:"12px",borderRadius:12,background:"#4338CA",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}}>Guardar</button>
+        </div>
+      </Sheet>
+    );
+  }
+
   return null;
 }
 
@@ -621,7 +751,7 @@ function CardFicha({ card, cardMd, cardPayments, totalThisMonth, totalDebt, onAd
               <span style={{fontSize:10,background:p.isCredit?"#064E3B":p.isMSI?"#1E1B4B":"#064E3B",color:p.isCredit?"#34D399":p.isMSI?"#818CF8":"#34D399",padding:"1px 7px",borderRadius:20,fontWeight:700}}>
                 {p.isCredit?"ABONO":p.isMSI?`${p.installment}/${p.totalInstallments}`:"1/1"}
               </span>
-              <span style={{color:"#9CA3AF",fontSize:12}}>{p.desc}</span>
+              <span style={{color:"#9CA3AF",fontSize:12}}>{p.isBusiness&&"💼 "}{p.desc}</span>
             </div>
             <span style={{color:p.isCredit?"#34D399":p.isMSI?"#818CF8":"#34D399",fontSize:13,fontWeight:600}}>{fmt(p.amount)}</span>
           </div>
@@ -656,16 +786,19 @@ export default function App({ initialData, onSave, user, onLogout }) {
   const [startingBalance,setStartingBalance] = useState(d.startingBalance || { amount:0, year:CY, month:CM });
   const [goals,setGoals]         = useState(d.goals || []);
   const [monthData,setMonthData] = useState(d.monthData || {});
+  const [bizExpenses,setBizExpenses] = useState(d.bizExpenses || []);
+  const [bizRecurringIncome,setBizRecurringIncome] = useState(d.bizRecurringIncome || []);
+  const [bizStartingBalance,setBizStartingBalance] = useState(d.bizStartingBalance || { amount:0, year:CY, month:CM });
   const [modal,setModal]         = useState(null);
 
   // Save to Firebase on any change — protect against overwriting with empty data
  const hasLoaded = useRef(false);
  useEffect(()=>{
-    const hasData = purchases.length > 0 || goals.length > 0 || Object.keys(monthData).length > 0;
+    const hasData = purchases.length > 0 || goals.length > 0 || Object.keys(monthData).length > 0 || bizExpenses.length > 0 || bizRecurringIncome.length > 0;
     if(!hasLoaded.current && !hasData) return; // don't save empty state on first load
     hasLoaded.current = true;
-    onSave({ cards, fixedExpenses, quincenas, purchases, startingBalance, goals, monthData });
-},[cards,fixedExpenses,quincenas,purchases,startingBalance,goals,monthData]);
+    onSave({ cards, fixedExpenses, quincenas, purchases, startingBalance, goals, monthData, bizExpenses, bizRecurringIncome, bizStartingBalance });
+},[cards,fixedExpenses,quincenas,purchases,startingBalance,goals,monthData,bizExpenses,bizRecurringIncome,bizStartingBalance]);
 
   const mk = `${viewYear}-${pad(viewMonth)}`;
   const md = monthData[mk]||{};
@@ -766,7 +899,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
       const total=cardTotals[card.id]||0;
       if(total>0) {
         const pays=purchasePaymentsByCard[card.id]||[];
-        const sub=pays.map(p=>`${p.isCredit?"🎁 ":""}${p.desc}${p.isMSI?` (${p.installment}/${p.totalInstallments})`:""}` ).join(" · ");
+        const sub=pays.map(p=>`${p.isCredit?"🎁 ":""}${p.isBusiness?"💼 ":""}${p.desc}${p.isMSI?` (${p.installment}/${p.totalInstallments})`:""}` ).join(" · ");
         items.push({id:`c-${card.id}`,type:"expense",name:card.name,sub:sub||undefined,
           date:`${viewYear}-${pad(viewMonth)}-${pad(card.payDay)}`,amount:total,
           status:md.cards?.[card.id]?.paid?"pagado":"pendiente",cardId:card.id,cardColor:card.color});
@@ -918,7 +1051,57 @@ export default function App({ initialData, onSave, user, onLogout }) {
     });
   },[goals,monthData,quincenas,cards,purchases,fixedExpenses,viewYear,viewMonth]);
 
-  const TABS=[{id:"timeline",icon:"📅",label:"Timeline"},{id:"cards",icon:"💳",label:"TDC"},{id:"fixed",icon:"🏠",label:"Fijos"},{id:"goals",icon:"🎯",label:"Metas"},{id:"config",icon:"⚙️",label:"Config"}];
+  // Business (negocio) — cargos de tarjeta compartida marcados como negocio, en el mes visto
+  const bizCardCharges = useMemo(()=>{
+    const list=[];
+    Object.entries(purchasePaymentsByCard).forEach(([cardId,arr])=>{
+      arr.forEach(p=>{ if(p.isBusiness) list.push({...p,cardId}); });
+    });
+    return list;
+  },[purchasePaymentsByCard]);
+  const bizCardChargesTotal = bizCardCharges.reduce((s,p)=>s+p.amount,0);
+  const bizRecurringIncomeTotal = useMemo(()=>bizRecurringIncome.reduce((s,bri)=>s+(md.bizIncomeAmt?.[bri.id]??bri.amount),0),[bizRecurringIncome,md]);
+  const bizAdhocIncomeTotal = useMemo(()=>(md.bizIncomes||[]).reduce((s,bi)=>s+bi.amount,0),[md]);
+  const bizIncomeTotal = bizRecurringIncomeTotal + bizAdhocIncomeTotal;
+  const bizExpenseTotal = useMemo(()=>bizExpenses.reduce((s,be)=>s+(md.bizExpenseAmt?.[be.id]??be.amount),0),[bizExpenses,md]);
+  const bizNet = bizIncomeTotal - bizExpenseTotal - bizCardChargesTotal;
+  const personalExpenseTotal = totEx - bizCardChargesTotal;
+  const personalNet = totIn - personalExpenseTotal;
+  const combinedNet = personalNet + bizNet;
+
+  // Neto del negocio de un mes específico (para acumular la caja del negocio mes a mes)
+  const getBizMonthNet = (y, m) => {
+    const k = `${y}-${pad(m)}`;
+    const mmd = monthData[k]||{};
+    let income = 0, expense = 0;
+    bizRecurringIncome.forEach(bri=>{ income += (mmd.bizIncomeAmt?.[bri.id] ?? bri.amount); });
+    (mmd.bizIncomes||[]).forEach(bi=>{ income += bi.amount; });
+    bizExpenses.forEach(be=>{ expense += (mmd.bizExpenseAmt?.[be.id] ?? be.amount); });
+    cards.forEach(card=>{
+      purchases.flatMap(p=>p.cardId===card.id?getPurchasePayments(p):[])
+        .filter(p=>p.year===y&&p.month===m&&p.isBusiness).forEach(p=>{ expense += p.amount; });
+    });
+    return income - expense;
+  };
+
+  // Caja del negocio: saldo inicial del negocio + neto acumulado de meses anteriores
+  const bizCarryOver = useMemo(()=>{
+    const sb = bizStartingBalance;
+    if(!sb || sb.amount == null) return 0;
+    let bal = sb.amount;
+    let y = sb.year, m = sb.month;
+    if(viewYear < y || (viewYear === y && viewMonth <= m)) return sb.amount;
+    while(y < viewYear || (y === viewYear && m < viewMonth)) {
+      bal += getBizMonthNet(y, m);
+      m++; if(m>12){m=1;y++;}
+    }
+    return bal;
+  },[bizStartingBalance,monthData,viewYear,viewMonth,bizRecurringIncome,bizExpenses,cards,purchases]);
+  const bizProj = bizCarryOver + bizNet; // caja del negocio proyectada a fin de este mes
+
+  const combinedProj = proj + bizProj; // saldo personal proyectado + caja del negocio, ambos acumulados
+
+  const TABS=[{id:"timeline",icon:"📅",label:"Timeline"},{id:"cards",icon:"💳",label:"TDC"},{id:"fixed",icon:"🏠",label:"Fijos"},{id:"biz",icon:"💼",label:"Negocio"},{id:"goals",icon:"🎯",label:"Metas"},{id:"config",icon:"⚙️",label:"Config"}];
 
 
 
@@ -949,6 +1132,11 @@ export default function App({ initialData, onSave, user, onLogout }) {
             <div style={{textAlign:"right"}}>
               <div style={{color:"#6B7280",fontSize:10,letterSpacing:1}}>PROYECCIÓN</div>
               <div style={{fontWeight:800,fontSize:20,color:proj<0?"#EF4444":proj<5000?"#F59E0B":"#34D399"}}>{fmt(proj)}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{color:"#818CF8",fontSize:10,letterSpacing:1,fontWeight:700}}>TOTAL COMBINADO</div>
+              <div style={{color:"#6B7280",fontSize:10}}>Caja personal + negocio</div>
+              <div style={{fontWeight:800,fontSize:18,color:combinedProj<0?"#EF4444":combinedProj<5000?"#F59E0B":"#34D399"}}>{fmt(combinedProj)}</div>
             </div>
           </div>
         </div>
@@ -1101,6 +1289,172 @@ export default function App({ initialData, onSave, user, onLogout }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* BIZ */}
+      {tab==="biz" && (
+        <div style={{padding:"14px 18px"}}>
+          <div style={{color:"#9CA3AF",fontSize:13,fontWeight:600,marginBottom:14}}>Negocio</div>
+
+          {/* Caja del negocio (acumulada) */}
+          <div style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:12,border:"1px solid #1F2937"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{color:"#4B5563",fontSize:10,letterSpacing:1,fontWeight:700}}>CAJA DEL NEGOCIO (ACUMULADA)</div>
+                <div style={{color:"#6B7280",fontSize:11,marginTop:2}}>Proyectada a fin de {MONTHS[viewMonth-1]}</div>
+              </div>
+              <div style={{fontWeight:800,fontSize:22,color:bizProj<0?"#EF4444":"#34D399"}}>{fmt(bizProj)}</div>
+            </div>
+          </div>
+
+          {/* Saldo inicial del negocio */}
+          <div style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:18,border:"1px solid #1F2937"}}>
+            <div style={{color:"#F9FAFB",fontWeight:700,fontSize:14,marginBottom:4}}>💰 Saldo inicial del negocio</div>
+            <div style={{color:"#6B7280",fontSize:12,marginBottom:12}}>Cuánto tenía el negocio cuando empezaste a registrarlo aquí. A partir de ese mes, la caja se acumula sola con el neto de cada mes.</div>
+            <div style={{display:"flex",gap:10}}>
+              <div style={{flex:2}}>
+                <div style={{color:"#9CA3AF",fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:5}}>MONTO ($)</div>
+                <input style={IS} type="number" value={bizStartingBalance.amount||""} placeholder="0.00"
+                  onChange={e=>setBizStartingBalance(p=>({...p,amount:parseFloat(e.target.value)||0}))}/>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{color:"#9CA3AF",fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:5}}>MES</div>
+                <MonthYearSelect year={bizStartingBalance.year} month={bizStartingBalance.month}
+                  onChange={(y,m)=>setBizStartingBalance(p=>({...p,year:y,month:m}))}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumen del mes (flujo, sin acumular) */}
+          <div style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:18,border:"1px solid #1F2937"}}>
+            <div style={{color:"#4B5563",fontSize:10,letterSpacing:1,fontWeight:700,marginBottom:10}}>RESUMEN DEL MES (FLUJO)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[["Personal",personalNet],["Negocio",bizNet],["Total",combinedNet]].map(([l,v])=>(
+                <div key={l} style={{textAlign:"center"}}>
+                  <div style={{color:"#4B5563",fontSize:10,letterSpacing:1,marginBottom:3}}>{l.toUpperCase()}</div>
+                  <div style={{fontWeight:800,fontSize:15,color:v<0?"#EF4444":"#34D399"}}>{fmt(v)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Ingresos recurrentes */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <span style={{color:"#9CA3AF",fontSize:13,fontWeight:600}}>Ingresos recurrentes</span>
+            <button onClick={()=>setModal({type:"addBizRecurringIncome"})} style={{padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,background:"#064E3B",border:"1px solid #059669",color:"#34D399"}}>+ Recurrente</button>
+          </div>
+          {bizRecurringIncome.length===0 && <div style={{color:"#374151",fontSize:12,textAlign:"center",padding:"10px 0 18px"}}>Sin ingresos recurrentes registrados</div>}
+          {(()=>{
+            const groups = {};
+            bizRecurringIncome.forEach(bri=>{
+              const key = bri.client?.trim() || "Sin cliente asignado";
+              if(!groups[key]) groups[key]=[];
+              groups[key].push(bri);
+            });
+            return Object.entries(groups).map(([client,items])=>{
+              const subtotal = items.reduce((s,bri)=>s+(md.bizIncomeAmt?.[bri.id]??bri.amount),0);
+              return (
+                <div key={client} style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:10,border:"1px solid #1F2937"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{color:"#F9FAFB",fontWeight:800,fontSize:15}}>{client}</div>
+                    <div style={{color:"#34D399",fontWeight:800,fontSize:16}}>{fmt(subtotal)}/mes</div>
+                  </div>
+                  {items.map(bri=>{
+                    const amt=md.bizIncomeAmt?.[bri.id]??bri.amount;
+                    return (
+                      <div key={bri.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:"1px solid #1F2937"}}>
+                        <div>
+                          <div style={{color:"#D1D5DB",fontSize:13,fontWeight:600}}>{bri.name}</div>
+                          <div style={{color:"#6B7280",fontSize:11}}>Día {bri.day} · {bri.type==="fixed"?"Fijo":"Variable"}</div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{color:"#9CA3AF",fontSize:13,fontWeight:600}}>{fmt(amt)}</span>
+                          <button onClick={()=>setModal({type:"editBizRecurringIncome",bri})} style={{padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:11,background:"#1F2937",border:"1px solid #374151",color:"#9CA3AF"}}>✏</button>
+                          <button onClick={()=>setBizRecurringIncome(prev=>prev.filter(x=>x.id!==bri.id))} style={{padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:11,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444"}}>🗑</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()}
+
+          {/* Ingresos de este mes (ad-hoc, ej. clientes nuevos) */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"18px 0 10px"}}>
+            <span style={{color:"#9CA3AF",fontSize:13,fontWeight:600}}>Ingresos de este mes (clientes nuevos)</span>
+            <button onClick={()=>setModal({type:"addBizIncome"})} style={{padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,background:"#064E3B",border:"1px solid #059669",color:"#34D399"}}>+ Ingreso</button>
+          </div>
+          {(md.bizIncomes||[]).length===0 && <div style={{color:"#374151",fontSize:12,textAlign:"center",padding:"10px 0 18px"}}>Sin ingresos registrados este mes</div>}
+          {(md.bizIncomes||[]).map(bi=>(
+            <div key={bi.id} style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:10,border:"1px solid #1F2937"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{color:"#F9FAFB",fontWeight:700,fontSize:15}}>{bi.name}</div>
+                  <div style={{color:"#6B7280",fontSize:12}}>{bi.date}</div>
+                </div>
+                <div style={{color:bi.paid?"#6B7280":"#34D399",fontWeight:800,fontSize:18,textDecoration:bi.paid?"line-through":"none"}}>{fmt(bi.amount)}</div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <button onClick={()=>updateMD(c=>({...c,bizIncomes:(c.bizIncomes||[]).map(x=>x.id===bi.id?{...x,paid:!x.paid}:x)}))}
+                  style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,background:bi.paid?"#1F2937":"#064E3B",border:`1px solid ${bi.paid?"#374151":"#059669"}`,color:bi.paid?"#9CA3AF":"#34D399"}}>{bi.paid?"↩ Revertir":"✓ Recibido"}</button>
+                <button onClick={()=>updateMD(c=>({...c,bizIncomes:(c.bizIncomes||[]).filter(x=>x.id!==bi.id)}))} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444"}}>🗑</button>
+              </div>
+            </div>
+          ))}
+
+          {/* Gastos */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"18px 0 10px"}}>
+            <span style={{color:"#9CA3AF",fontSize:13,fontWeight:600}}>Gastos recurrentes (servidores, licencias, ads...)</span>
+            <button onClick={()=>setModal({type:"addBizExpense"})} style={{padding:"6px 12px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,background:"#1F2937",border:"1px solid #374151",color:"#9CA3AF"}}>+ Gasto</button>
+          </div>
+          {bizExpenses.length===0 && <div style={{color:"#374151",fontSize:12,textAlign:"center",padding:"10px 0 18px"}}>Sin gastos registrados</div>}
+          {bizExpenses.map(be=>{
+            const amt=md.bizExpenseAmt?.[be.id]??be.amount;
+            const isPaid=md.bizExpensePaid?.[be.id]||false;
+            return (
+              <div key={be.id} style={{background:"#111827",borderRadius:14,padding:"14px 16px",marginBottom:10,border:"1px solid #1F2937"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{color:"#F9FAFB",fontWeight:700,fontSize:15}}>{be.name}</div>
+                    <div style={{color:"#6B7280",fontSize:12}}>Día {be.day} · {be.type==="fixed"?"Fijo":"Variable"}</div>
+                  </div>
+                  <div style={{color:isPaid?"#6B7280":"#F9FAFB",fontWeight:800,fontSize:18,textDecoration:isPaid?"line-through":"none"}}>{fmt(amt)}</div>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button onClick={()=>updateMD(c=>({...c,bizExpensePaid:{...(c.bizExpensePaid||{}),[be.id]:!isPaid}}))}
+                    style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700,background:isPaid?"#1F2937":"#064E3B",border:`1px solid ${isPaid?"#374151":"#059669"}`,color:isPaid?"#9CA3AF":"#34D399"}}>{isPaid?"↩ Revertir":"✓ Pagar"}</button>
+                  <button onClick={()=>setModal({type:"editBizExpense",be})} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F2937",border:"1px solid #374151",color:"#9CA3AF"}}>✏</button>
+                  <button onClick={()=>setBizExpenses(prev=>prev.filter(x=>x.id!==be.id))} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444"}}>🗑</button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Cargos de tarjeta compartida marcados como negocio */}
+          <div style={{margin:"18px 0 10px"}}>
+            <span style={{color:"#9CA3AF",fontSize:13,fontWeight:600}}>Cargos a tarjeta este mes</span>
+          </div>
+          {bizCardCharges.length===0 ? (
+            <div style={{color:"#374151",fontSize:12,textAlign:"center",padding:"6px 0"}}>Sin cargos de negocio marcados en tarjetas este mes</div>
+          ) : (
+            <div style={{background:"#111827",borderRadius:14,padding:"12px 16px",border:"1px solid #1F2937",marginBottom:6}}>
+              {bizCardCharges.map(p=>{
+                const card = cards.find(c=>c.id===p.cardId);
+                return (
+                  <div key={p.purchaseId} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {card && <div style={{width:3,height:16,borderRadius:2,background:card.color}}/>}
+                      <span style={{color:"#9CA3AF",fontSize:12}}>{card?.name} · {p.desc}</span>
+                    </div>
+                    <span style={{color:"#F9FAFB",fontSize:13,fontWeight:600}}>{fmt(p.amount)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div style={{color:"#4B5563",fontSize:11,marginBottom:20}}>Márcalos como "💼 Negocio" desde 💳 Tarjetas → Compras.</div>
         </div>
       )}
 
@@ -1346,6 +1700,9 @@ export default function App({ initialData, onSave, user, onLogout }) {
                   if(d.goals) setGoals(d.goals);
                   if(d.monthData) setMonthData(d.monthData);
                   if(d.startingBalance) setStartingBalance(d.startingBalance);
+                  if(d.bizExpenses) setBizExpenses(d.bizExpenses);
+                  if(d.bizRecurringIncome) setBizRecurringIncome(d.bizRecurringIncome);
+                  if(d.bizStartingBalance) setBizStartingBalance(d.bizStartingBalance);
                   setModal(null);
                 } catch(e){ alert("Error: JSON inválido"); }
               }} style={{width:"100%",padding:"13px",borderRadius:12,background:"#064E3B",border:"1px solid #059669",color:"#34D399",fontSize:15,fontWeight:700,cursor:"pointer"}}>
@@ -1357,7 +1714,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
       })()}
 
       {modal?.type==="exportData" && (()=>{
-        const data = JSON.stringify({ cards, fixedExpenses, quincenas, purchases, goals, monthData, startingBalance, exportDate: new Date().toISOString(), version: "finanzas-control-v1" }, null, 2);
+        const data = JSON.stringify({ cards, fixedExpenses, quincenas, purchases, goals, monthData, startingBalance, bizExpenses, bizRecurringIncome, bizStartingBalance, exportDate: new Date().toISOString(), version: "finanzas-control-v1" }, null, 2);
         return (
           <Sheet title="📦 Exportar datos" onClose={()=>setModal(null)}>
             <div style={{color:"#6B7280",fontSize:12,marginBottom:10}}>Copia todo el texto de abajo y guárdalo en un archivo. Lo usaremos para importar en la nueva versión.</div>
@@ -1373,9 +1730,9 @@ export default function App({ initialData, onSave, user, onLogout }) {
 
       <ActiveModal
         modal={modal}
-        cards={cards} fixedExpenses={fixedExpenses} purchases={purchases} quincenas={quincenas}
+        cards={cards} fixedExpenses={fixedExpenses} purchases={purchases} quincenas={quincenas} bizExpenses={bizExpenses} bizRecurringIncome={bizRecurringIncome}
         viewYear={viewYear} viewMonth={viewMonth} md={md}
-        setCards={setCards} setFixed={setFixed} setPurchases={setPurchases} setQuincenas={setQuincenas}
+        setCards={setCards} setFixed={setFixed} setPurchases={setPurchases} setQuincenas={setQuincenas} setBizExpenses={setBizExpenses} setBizRecurringIncome={setBizRecurringIncome}
         updateMD={updateMD}
         onSaveGoal={(g)=>setGoals(prev=>[...prev,g])}
         onUpdateGoal={(id,data)=>setGoals(prev=>prev.map(g=>g.id===id?{...g,...data}:g))}
