@@ -399,7 +399,10 @@ function ActiveModal({ modal, cards, fixedExpenses, purchases, quincenas,
         <F label="DEDUCCIÓN GASTO CASA ($)"><input style={IS} type="number" min="0" value={f7.deductions} onChange={e=>setF7(p=>({...p,deductions:e.target.value}))}/></F>
         <F label="DÍA DEL MES"><input style={IS} type="number" min="1" max="31" value={f7.day} onChange={e=>setF7(p=>({...p,day:e.target.value}))}/></F>
         {net7>0 && <div style={{background:"#064E3B",borderRadius:10,padding:"10px 14px",marginBottom:14,color:"#34D399",fontWeight:700,fontSize:14}}>Neto: {fmt(net7)}</div>}
-        <Btn bg="#064E3B" border="#059669" color="#34D399" onClick={()=>{ setQuincenas(prev=>prev.map(q=>q.id===modal.q.id?{...q,label:f7.label,grossAmount:parseFloat(f7.grossAmount)||0,deductions:parseFloat(f7.deductions)||0,day:parseInt(f7.day)||1}:q)); onClose(); }}>Guardar</Btn>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>{ setQuincenas(prev=>prev.filter(q=>q.id!==modal.q.id)); onClose(); }} style={{flex:1,padding:"12px",borderRadius:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444",fontSize:14,cursor:"pointer",fontWeight:700}}>Eliminar</button>
+          <button onClick={()=>{ setQuincenas(prev=>prev.map(q=>q.id===modal.q.id?{...q,label:f7.label,grossAmount:parseFloat(f7.grossAmount)||0,deductions:parseFloat(f7.deductions)||0,day:parseInt(f7.day)||1}:q)); onClose(); }} style={{flex:2,padding:"12px",borderRadius:12,background:"#064E3B",border:"1px solid #059669",color:"#34D399",fontSize:14,fontWeight:700,cursor:"pointer"}}>Guardar</button>
+        </div>
       </Sheet>
     );
   }
@@ -1231,7 +1234,10 @@ export default function App({ initialData, onSave, user, onLogout }) {
                   <div style={{color:"#6B7280",fontSize:12}}>Día {q.day} · {fmt(q.grossAmount)} − {fmt(q.deductions)}</div>
                   <div style={{color:"#34D399",fontSize:13,fontWeight:700,marginTop:2}}>Neto: {fmt(q.grossAmount-q.deductions)}</div>
                 </div>
-                <button onClick={()=>setModal({type:"editQuincena",q})} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F2937",border:"1px solid #374151",color:"#9CA3AF"}}>✏</button>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>setModal({type:"editQuincena",q})} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F2937",border:"1px solid #374151",color:"#9CA3AF"}}>✏</button>
+                  <button onClick={()=>setQuincenas(prev=>prev.filter(x=>x.id!==q.id))} style={{padding:"7px 12px",borderRadius:8,cursor:"pointer",fontSize:12,background:"#1F0000",border:"1px solid #EF444433",color:"#EF4444"}}>🗑</button>
+                </div>
               </div>
             </div>
           ))}
