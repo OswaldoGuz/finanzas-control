@@ -790,6 +790,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
   const [bizRecurringIncome,setBizRecurringIncome] = useState(d.bizRecurringIncome || []);
   const [bizStartingBalance,setBizStartingBalance] = useState(d.bizStartingBalance || { amount:0, year:CY, month:CM });
   const [modal,setModal]         = useState(null);
+  const [simulateBiz,setSimulateBiz] = useState(false); // vista: simular saldo personal + caja del negocio
 
   // Save to Firebase on any change — protect against overwriting with empty data
  const hasLoaded = useRef(false);
@@ -1101,6 +1102,36 @@ export default function App({ initialData, onSave, user, onLogout }) {
 
   const combinedProj = proj + bizProj; // saldo personal proyectado + caja del negocio, ambos acumulados
 
+  // Línea de tiempo del negocio (con fechas reales) — para simular el saldo personal
+  // sumando solo el dinero del negocio que ya estaría disponible a cada fecha.
+  const bizTimeline = useMemo(()=>{
+    const items=[];
+    bizRecurringIncome.forEach(bri=>{
+      const amt = md.bizIncomeAmt?.[bri.id] ?? bri.amount;
+      if(amt>0) items.push({date:`${viewYear}-${pad(viewMonth)}-${pad(bri.day)}`, amount:amt, type:"income"});
+    });
+    (md.bizIncomes||[]).forEach(bi=>{
+      if(bi.date) items.push({date:bi.date, amount:bi.amount, type:"income"});
+    });
+    bizExpenses.forEach(be=>{
+      const amt = md.bizExpenseAmt?.[be.id] ?? be.amount;
+      if(amt>0) items.push({date:`${viewYear}-${pad(viewMonth)}-${pad(be.day)}`, amount:amt, type:"expense"});
+    });
+    cards.forEach(card=>{
+      const total = (purchasePaymentsByCard[card.id]||[]).filter(p=>p.isBusiness).reduce((s,p)=>s+p.amount,0);
+      if(total>0) items.push({date:`${viewYear}-${pad(viewMonth)}-${pad(card.payDay)}`, amount:total, type:"expense"});
+    });
+    items.sort((a,b)=>a.date.localeCompare(b.date));
+    return items;
+  },[bizRecurringIncome,md,bizExpenses,cards,purchasePaymentsByCard,viewYear,viewMonth]);
+
+  // Caja del negocio disponible acumulada hasta (e incluyendo) una fecha dada del mes visto
+  const bizBalanceAsOf = (dateStr) => {
+    let bal = bizCarryOver;
+    bizTimeline.forEach(it=>{ if(it.date<=dateStr) bal += (it.type==="income"?it.amount:-it.amount); });
+    return bal;
+  };
+
   const TABS=[{id:"timeline",icon:"📅",label:"Timeline"},{id:"cards",icon:"💳",label:"TDC"},{id:"fixed",icon:"🏠",label:"Fijos"},{id:"biz",icon:"💼",label:"Negocio"},{id:"goals",icon:"🎯",label:"Metas"},{id:"config",icon:"⚙️",label:"Config"}];
 
 
@@ -1161,6 +1192,22 @@ export default function App({ initialData, onSave, user, onLogout }) {
               <button onClick={()=>setModal({type:"addExtraIncome"})} style={{padding:"6px 10px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:700,background:"#064E3B",border:"1px solid #059669",color:"#34D399"}}>+ Ingreso</button>
             </div>
           </div>
+
+          {/* Simular con caja del negocio */}
+          <div style={{padding:"0 18px 8px"}}>
+            <div onClick={()=>setSimulateBiz(v=>!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",background:simulateBiz?"#1E1B4B":"#111827",border:`1px solid ${simulateBiz?"#4338CA":"#1F2937"}`,borderRadius:12,padding:"10px 14px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:38,height:22,borderRadius:11,background:simulateBiz?"#4338CA":"#1F2937",border:`1px solid ${simulateBiz?"#6366F1":"#374151"}`,position:"relative",flexShrink:0}}>
+                  <div style={{width:16,height:16,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:simulateBiz?19:2,transition:"left .2s"}}/>
+                </div>
+                <div>
+                  <div style={{color:simulateBiz?"#C7D2FE":"#9CA3AF",fontSize:13,fontWeight:700}}>💼 Simular con caja del negocio</div>
+                  <div style={{color:"#6B7280",fontSize:11}}>Suma el dinero del negocio según la fecha real de cada cobro/pago (hoy: {fmt(bizCarryOver)}, fin de mes: {fmt(bizProj)})</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Alerts */}
           {alerts.length>0 && (
             <div style={{padding:"0 18px 8px"}}>
@@ -1202,6 +1249,7 @@ export default function App({ initialData, onSave, user, onLogout }) {
                 {timeline.map((item,i)=>{
                   const isInc=item.type==="income";
                   const ov=(()=>{if(isInc||item.status!=="pendiente"||!item.date) return false;const {y:ny,m:nm}=todayObj();if(viewYear!==ny||viewMonth!==nm) return false;return new Date(item.date+"T12:00:00")<new Date();})();
+                  const shownBal = simulateBiz ? item.balAfter + bizBalanceAsOf(item.date||`${viewYear}-${pad(viewMonth)}-01`) : item.balAfter;
                   return (
                     <tr key={item.id} onClick={()=>toggle(item)} style={{cursor:"pointer",background:i%2===1?"#0F172A":"#111827"}}>
                       <td style={{padding:"10px 8px",borderBottom:"1px solid #1F2937"}}>
@@ -1223,14 +1271,14 @@ export default function App({ initialData, onSave, user, onLogout }) {
                         <span style={{fontWeight:700,fontSize:13,color:isInc?"#34D399":item.status==="pagado"?"#6B7280":"#F87171"}}>{isInc?"+":"-"}{fmt(item.amount)}</span>
                       </td>
                       <td style={{padding:"10px 8px",borderBottom:"1px solid #1F2937",textAlign:"right"}}>
-                        <span style={{fontWeight:700,fontSize:13,color:item.balAfter<0?"#EF4444":item.balAfter<5000?"#F59E0B":"#D1D5DB"}}>{fmt(item.balAfter)}</span>
+                        <span style={{fontWeight:700,fontSize:13,color:simulateBiz?"#818CF8":shownBal<0?"#EF4444":shownBal<5000?"#F59E0B":"#D1D5DB"}}>{fmt(shownBal)}</span>
                       </td>
                     </tr>
                   );
                 })}
                 <tr style={{background:"#0D1424"}}>
-                  <td colSpan={2} style={{padding:"12px 8px",color:"#6B7280",fontSize:12,fontWeight:700}}>SALDO FINAL PROYECTADO</td>
-                  <td colSpan={2} style={{padding:"12px 8px",textAlign:"right",fontWeight:800,fontSize:16,color:proj<0?"#EF4444":proj<5000?"#F59E0B":"#34D399"}}>{fmt(proj)}</td>
+                  <td colSpan={2} style={{padding:"12px 8px",color:"#6B7280",fontSize:12,fontWeight:700}}>SALDO FINAL PROYECTADO{simulateBiz&&" (con negocio)"}</td>
+                  <td colSpan={2} style={{padding:"12px 8px",textAlign:"right",fontWeight:800,fontSize:16,color:simulateBiz?"#818CF8":proj<0?"#EF4444":proj<5000?"#F59E0B":"#34D399"}}>{fmt(simulateBiz?proj+bizProj:proj)}</td>
                 </tr>
               </tbody>
             </table>
